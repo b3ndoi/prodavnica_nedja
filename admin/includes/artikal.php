@@ -1,0 +1,263 @@
+<?php
+
+class Artikal extends Db_object{
+
+	protected static $db_table = "artikli";
+	protected static $db_table_fields = array('ime', 'slika', 'opis', 'cena', 'id_tip', 'id_kategorije');
+	public $id;
+	public $ime;
+	public $slika;
+	public $opis;
+	public $cena;
+	public $id_tip;
+	public $id_kategorije;
+	public $datum;
+
+	public $tmp_path;
+	public $upload_directory = "images";
+
+	public $errors = array();
+	public $upload_errors_array = array(
+    UPLOAD_ERR_OK         => 'There is no error, the file uploaded with success',
+    UPLOAD_ERR_INI_SIZE   => 'The uploaded file exceeds the upload_max_filesize directive in php.ini',
+    UPLOAD_ERR_FORM_SIZE  => 'The uploaded file exceeds the MAX_FILE_SIZE directive that was specified in the HTML form',
+    UPLOAD_ERR_PARTIAL    => 'The uploaded file was only partially uploaded',
+    UPLOAD_ERR_NO_FILE    => 'No file was uploaded',
+    UPLOAD_ERR_NO_TMP_DIR => 'Missing a temporary folder',
+    UPLOAD_ERR_CANT_WRITE => 'Failed to write file to disk.',
+    UPLOAD_ERR_EXTENSION  => 'A PHP extension stopped the file upload.',
+	);
+
+	public function set_file($file){
+
+		if(empty($file) || !$file || !is_array($file)){
+
+
+			$this->errors = "There was no file uploaded here";
+			return false;
+
+		}
+		else if ($file['error'] != 0){
+
+			$this->errors = $this->upload_errors_array[$file['error']];
+			return false;
+
+		}else{
+
+			$this->slika = basename($file['name']);
+			$this->tmp_path = $file['tmp_name'];
+			$this->type = $file['type'];
+			$this->size = $file['size'];
+
+		}
+
+	}
+
+	public function naziv_kategorije(){
+
+		global $database;
+
+		$sql = "SELECT ime FROM kategorije WHERE ";
+		$sql .= "id={$this->id_kategorije}";
+
+		$result = $database->query($sql);
+		$row = mysqli_fetch_assoc($result);
+
+		return $row['ime'];
+
+	}
+
+	public function naziv_tipa(){
+
+		global $database;
+
+		$sql = "SELECT ime FROM tipovi WHERE ";
+		$sql .= "id={$this->id_tip}";
+
+		$result = $database->query($sql);
+
+		
+		$row = mysqli_fetch_assoc($result);
+
+		return $row['ime'];
+
+	}
+
+	public function provera_artikla(){
+
+		global $database;
+
+		$ime = $database->escape_string($this->ime);
+		$sql = "SELECT * FROM ". self::$db_table ." WHERE ";
+		$sql .= "ime = '{$ime}' ";
+
+		$sql_id = "SELECT * FROM ". self::$db_table ." WHERE ";
+		$sql_id .= "id = '{$this->id}'";
+
+		$result = $database->query($sql);
+		$result_id = $database->query($sql_id);
+		if($this->ime == ""){
+
+			$this->errors = "Unesite ime artikla!";
+			return false;
+
+		}
+		if($this->cena == ""){
+
+			$this->errors = "Unesite cenu artikla!";
+			return false;
+
+		}
+		if($this->opis == ""){
+
+			$this->errors = "Unesite opis artikla!";
+			return false;
+
+		}
+		if($this->ime == ""){
+
+			$this->errors = "Unesite ime kategoriji!";
+			return false;
+
+		}
+
+		if(mysqli_num_rows($result_id) == 0){
+			if(mysqli_num_rows($result) != 0){
+
+				$this->errors = "Artikal '".$this->ime."' već postoji!";
+				return false;
+				
+			}else{
+				return true;
+			}
+		}else{
+
+			return true;
+
+		}
+	}
+
+	public function picture_path(){
+
+		return $this->upload_directory.DS.$this->slika;
+
+	}
+
+	public function izbrisi_sliku(){
+
+		$stara = SITE_ROOT.DS.$this->picture_path();
+
+		return unlink($stara)? true : false;
+
+	}
+
+	public function save(){
+
+		if ($this->id){
+
+			
+
+			if(!empty($this->errors)){
+
+				return false;
+
+			}
+
+			if(empty($this->slika) || empty($this->tmp_path)){
+
+				$this->errors = "The file was not available";
+				return false;
+
+			}
+
+			$target_path = SITE_ROOT. DS . $this->upload_directory . DS . $this->slika;
+
+			// if(file_exists($target_path)){
+
+			// 	$this->errors = "The {$this->slika} alerady exists";
+			// 	return false;
+
+			// }
+
+			if(move_uploaded_file($this->tmp_path, $target_path)){
+				
+				if($this->update()){
+
+					unset($this->tmp_path);
+					return true;
+
+				}
+
+			}
+			else{
+
+				$this->errors = "the file directory probably does not have permission";
+                return false; 
+
+			}
+
+		}
+		else{
+
+			if(!empty($this->errors)){
+
+				return false;
+
+			}
+
+			if(empty($this->slika) || empty($this->tmp_path)){
+
+				$this->errors = "The file was not available";
+				return false;
+
+			}
+
+			$target_path = SITE_ROOT. DS . $this->upload_directory . DS . $this->slika;
+
+			if(file_exists($target_path)){
+
+				$this->errors = "The {$this->slika} alerady exists";
+				return false;
+
+			}
+
+			if(move_uploaded_file($this->tmp_path, $target_path)){
+
+				if($this->create()){
+
+					unset($this->tmp_path);
+					return true;
+
+				}
+
+			}
+			else{
+
+				$this->errors = "the file directory probably does not have permission";
+                return false; 
+
+			}
+
+		}
+
+	}
+
+	public function delete_photo(){
+
+		if($this->delete()){
+
+			$target_path = SITE_ROOT.DS.$this->picture_path();
+
+			return unlink($target_path)? true : false;
+
+		}else{
+
+			return false;
+
+		}
+
+	}
+
+}
+
+?>
